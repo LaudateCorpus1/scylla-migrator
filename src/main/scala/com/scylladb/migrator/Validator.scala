@@ -3,7 +3,6 @@ package com.scylladb.migrator
 import com.datastax.spark.connector._
 import com.datastax.spark.connector.cql._
 import com.datastax.spark.connector.rdd.ReadConf
-import com.datastax.spark.connector.writer.{ CassandraRowWriter, TokenRangeAccumulator, WriteConf }
 import com.scylladb.migrator.config.{ MigratorConfig, SourceSettings, TargetSettings }
 import com.scylladb.migrator.validation.RowComparisonFailure
 import org.apache.log4j.{ Level, LogManager, Logger }
@@ -135,61 +134,6 @@ object Validator {
       }
   }
 
-//  def remediateValidation(migratorConfig: MigratorConfig, rdd: RDD[RowComparisonFailure])(
-//    implicit spark: SparkSession): RDD[CassandraRow] = {
-//    // get all repairable rows
-//    val newRDD: RDD[CassandraRow] = rdd
-//      .flatMap { failure =>
-//        (failure) match {
-//          case RowComparisonFailure(row, _, List(RowComparisonFailure.Item.MissingTargetRow)) =>
-//            Some(row) //new CassandraSQLRow(row.metaData, row.columnValues))
-//          case RowComparisonFailure(
-//              row,
-//              _,
-//              List(RowComparisonFailure.Item.DifferingFieldValues(_))) =>
-//            Some(row) //new CassandraSQLRow(row.metaData, row.columnValues))
-//          case default => {
-//            log.error("Unrepairable comparison failure:\n${default.mkString()}")
-//            None
-//          }
-//        }
-//      }
-//
-//    val sourceDF =
-//      migratorConfig.source match {
-//        case cassandraSource: SourceSettings.Cassandra =>
-//          readers.Cassandra.readDataframe(
-//            spark,
-//            cassandraSource,
-//            cassandraSource.preserveTimestamps,
-//            migratorConfig.skipTokenRanges)
-//        case parquetSource: SourceSettings.Parquet =>
-//          readers.Parquet.readDataFrame(spark, parquetSource)
-//        case dynamoSource: SourceSettings.DynamoDB =>
-//          val tableDesc = DynamoUtils
-//            .buildDynamoClient(dynamoSource.endpoint, dynamoSource.credentials, dynamoSource.region)
-//            .describeTable(dynamoSource.table)
-//            .getTable
-//
-//          readers.DynamoDB.readDataFrame(spark, dynamoSource, tableDesc)
-//      }
-//
-//    val tokenRangeAccumulator = TokenRangeAccumulator.empty
-//    spark.sparkContext.register(tokenRangeAccumulator, "Token ranges copied")
-//
-//    migratorConfig.target match {
-//      case target: TargetSettings.Scylla =>
-//        writers.Scylla.writeDataframe(
-//          target,
-//          migratorConfig.renames,
-//          sourceDF.dataFrame,
-//          sourceDF.timestampColumns,
-//          Some(tokenRangeAccumulator));
-//      case target_ => {}
-//    }
-//
-//  }
-
   def main(args: Array[String]): Unit = {
     implicit val spark = SparkSession
       .builder()
@@ -217,6 +161,7 @@ object Validator {
       log.error(s"Found ${failureCount} comparison failures")
       val timestamp = DateTime.now(DateTimeZone.UTC).getMillis();
 
+      // Write to Google Gs when migrating from Cassandra to Scylla
       migratorConfig.source match {
         case cassandraSource: SourceSettings.Cassandra =>
           failures
@@ -225,8 +170,6 @@ object Validator {
               s"gs://dataproc-7290e922-fdf8-4832-a421-dd157b235d2d-us-east1/output/${cassandraSource.keyspace}/${cassandraSource.table}/${timestamp}/")
         case _ => {}
       }
-
-//      remediateValidation(migratorConfig, failures)
     }
   }
 }
